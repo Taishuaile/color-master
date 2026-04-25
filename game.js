@@ -27,6 +27,8 @@
     targetHex: $('target-hex'),
     playerHex: $('player-hex'),
     targetCard: $('target-card'),
+    gameBody: $('game-body'),
+    colorCompare: $('color-compare'),
     similarityContainer: $('similarity-container'),
     similarityFill: $('similarity-fill'),
     similarityValue: $('similarity-value'),
@@ -45,6 +47,7 @@
     finalMessage: $('final-message'),
     finalStats: $('final-stats'),
     // 2D Picker
+    pickerContainer: $('picker-container'),
     pickerCanvas: $('picker-canvas'),
     pickerCursor: $('picker-cursor'),
     pickerHue: $('picker-hue'),
@@ -233,6 +236,18 @@
     pickerCtx.fillRect(0, 0, w, h);
   }
 
+  function resizePickerCanvas() {
+    const wrap = els.pickerCanvas.parentElement;
+    const w = wrap.clientWidth;
+    const h = wrap.clientHeight;
+    if (w > 0 && h > 0) {
+      els.pickerCanvas.width = w;
+      els.pickerCanvas.height = h;
+      drawPickerPlane();
+      updatePickerCursor();
+    }
+  }
+
   function updatePickerCursor() {
     const wrap = els.pickerCanvas.parentElement;
     const w = wrap.clientWidth;
@@ -399,12 +414,18 @@
       els.similarityContainer.classList.add('hidden');
     }
 
-    // Hard mode: fullscreen flash then hide target
+    // Hard mode: fullscreen picker, hide cards, 3s flash
     if (difficulty === 'hard') {
+      els.gameBody.classList.add('hard-mode');
+      els.colorCompare.classList.add('hidden-hard');
+      els.pickerContainer.classList.add('fullscreen-picker');
       els.targetCard.classList.add('target-hidden');
       els.targetHex.textContent = '???';
       showTargetFlash(targetHex);
     } else {
+      els.gameBody.classList.remove('hard-mode');
+      els.colorCompare.classList.remove('hidden-hard');
+      els.pickerContainer.classList.remove('fullscreen-picker');
       els.targetCard.classList.remove('target-hidden');
       els.targetColor.style.backgroundColor = targetHex;
       els.targetHex.textContent = targetHex;
@@ -440,7 +461,7 @@
 
     flash.classList.add('active');
 
-    let count = 5;
+    let count = 3;
     els.flashCountdown.textContent = count;
 
     clearInterval(flashInterval);
@@ -454,6 +475,9 @@
         // Now show game screen with hidden target
         els.targetColor.style.backgroundColor = '#1a1a2e';
         showScreen('game');
+
+        // Resize picker canvas for fullscreen after layout settles
+        requestAnimationFrame(() => resizePickerCanvas());
 
         // Start timer for hard mode
         els.timerContainer.classList.add('visible');
@@ -499,6 +523,11 @@
     clearInterval(timerInterval);
     clearInterval(flashInterval);
     els.targetFlash.classList.remove('active');
+
+    // Cleanup hard mode fullscreen
+    els.gameBody.classList.remove('hard-mode');
+    els.colorCompare.classList.remove('hidden-hard');
+    els.pickerContainer.classList.remove('fullscreen-picker');
 
     const playerRGB = getPlayerRGB();
     const dist = colorDistance(playerRGB, targetRGB);
