@@ -412,17 +412,6 @@
     // Auto-set hue to target's correct hue; player only adjusts sat & val on the 2D plane
     const targetHSV = rgbToHSV(targetRGB.r, targetRGB.g, targetRGB.b);
     currentHue = targetHSV.h;
-    // Hard mode starts at white; other modes start at mid-grey
-    if (difficulty === 'hard') {
-      currentSat = 0;
-      currentVal = 1;
-    } else {
-      currentSat = 0.5;
-      currentVal = 0.5;
-    }
-    drawPickerPlane();
-    updatePickerCursor();
-    updatePlayerColor();
 
     // Similarity bar: only visible in easy mode
     if (difficulty === 'easy') {
@@ -431,22 +420,34 @@
       els.similarityContainer.classList.add('hidden');
     }
 
-    // Hard mode: fullscreen picker, hide cards, 3s flash
+    // Set up mode classes BEFORE drawing so updatePlayerColor sees them
     if (difficulty === 'hard') {
+      currentSat = 0;
+      currentVal = 1;
       els.gameBody.classList.add('hard-mode');
       els.colorCompare.classList.add('hidden-hard');
       els.pickerContainer.classList.add('fullscreen-picker');
       els.targetCard.classList.add('target-hidden');
       els.targetHex.textContent = '???';
-      showTargetFlash(targetHex);
     } else {
+      currentSat = 0.5;
+      currentVal = 0.5;
       els.gameBody.classList.remove('hard-mode');
       els.colorCompare.classList.remove('hidden-hard');
       els.pickerContainer.classList.remove('fullscreen-picker');
       els.targetCard.classList.remove('target-hidden');
       els.targetColor.style.backgroundColor = targetHex;
       els.targetHex.textContent = targetHex;
+    }
 
+    drawPickerPlane();
+    updatePickerCursor();
+    updatePlayerColor();
+
+    // Hard mode: 3s flash then play
+    if (difficulty === 'hard') {
+      showTargetFlash(targetHex);
+    } else {
       // Timer for medium
       if (difficulty === 'medium') {
         els.timerContainer.classList.add('visible');
