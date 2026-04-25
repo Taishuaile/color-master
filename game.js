@@ -26,12 +26,8 @@
     playerColor: $('player-color'),
     targetHex: $('target-hex'),
     playerHex: $('player-hex'),
-    sliderR: $('slider-r'),
-    sliderG: $('slider-g'),
-    sliderB: $('slider-b'),
-    valR: $('val-r'),
-    valG: $('val-g'),
-    valB: $('val-b'),
+    targetCard: $('target-card'),
+    similarityContainer: $('similarity-container'),
     similarityFill: $('similarity-fill'),
     similarityValue: $('similarity-value'),
     timerContainer: $('timer-container'),
@@ -48,18 +44,33 @@
     finalGrade: $('final-grade'),
     finalMessage: $('final-message'),
     finalStats: $('final-stats'),
-    slidersContainer: $('sliders-container'),
+    // 2D Picker
+    pickerCanvas: $('picker-canvas'),
+    pickerCursor: $('picker-cursor'),
+    pickerHue: $('picker-hue'),
+    hueCursor: $('hue-cursor'),
+    // Flash
+    targetFlash: $('target-flash'),
+    flashCountdown: $('flash-countdown'),
   };
 
   // ─── State ─────────────────────────────────
   const TOTAL_ROUNDS = 10;
-  let difficulty = 'easy'; // easy | medium | hard
+  let difficulty = 'easy';
   let currentRound = 0;
   let totalScore = 0;
   let roundScores = [];
   let targetRGB = { r: 0, g: 0, b: 0 };
   let timerInterval = null;
+  let flashInterval = null;
   let timeLeft = 15;
+
+  // Picker state (HSV)
+  let currentHue = 0;       // 0-360
+  let currentSat = 1;       // 0-1
+  let currentVal = 1;       // 0-1
+  let isDraggingPicker = false;
+  let isDraggingHue = false;
 
   // ─── Background Particles ──────────────────
   const bgCanvas = $('bg-canvas');
@@ -89,8 +100,6 @@
 
   function drawParticles() {
     ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-
-    // Subtle gradient background
     const grad = ctx.createRadialGradient(
       bgCanvas.width / 2, bgCanvas.height / 2, 0,
       bgCanvas.width / 2, bgCanvas.height / 2, bgCanvas.width * 0.7
@@ -113,7 +122,6 @@
       ctx.fillStyle = `hsla(${p.hue}, 60%, 70%, ${p.alpha})`;
       ctx.fill();
     }
-
     requestAnimationFrame(drawParticles);
   }
 
@@ -125,7 +133,7 @@
     createParticles();
   });
 
-  // ─── Utility ───────────────────────────────
+  // ─── Color Utility ─────────────────────────
   function rgbToHex(r, g, b) {
     return '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0').toUpperCase()).join('');
   }
@@ -138,21 +146,208 @@
     };
   }
 
-  /** CIE76 ΔE approximation (using sRGB → Lab shortcut) */
+  function hsvToRGB(h, s, v) {
+    h = ((h % 360) + 360) % 360;
+    const c = v * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = v - c;
+    let r1, g1, b1;
+    if (h < 60)       { r1 = c; g1 = x; b1 = 0; }
+    else if (h < 120) { r1 = x; g1 = c; b1 = 0; }
+    else if (h < 180) { r1 = 0; g1 = c; b1 = x; }
+    else if (h < 240) { r1 = 0; g1 = x; b1 = c; }
+    else if (h < 300) { r1 = x; g1 = 0; b1 = c; }
+    else              { r1 = c; g1 = 0; b1 = x; }
+    return {
+      r: Math.round((r1 + m) * 255),
+      g: Math.round((g1 + m) * 255),
+      b: Math.round((b1 + m) * 255),
+    };
+  }
+
+  function rgbToHSV(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d !== 0) {
+      if (max === r) h = 60 * (((g - b) / d) % 6);
+      else if (max === g) h = 60 * ((b - r) / d + 2);
+      else h = 60 * ((r - g) / d + 4);
+    }
+    if (h < 0) h += 360;
+    const s = max === 0 ? 0 : d / max;
+    return { h, s, v: max };
+  }
+
   function colorDistance(c1, c2) {
-    // Simple Euclidean in sRGB — good enough for a game
     const dr = c1.r - c2.r;
     const dg = c1.g - c2.g;
     const db = c1.b - c2.b;
     return Math.sqrt(dr * dr + dg * dg + db * db);
   }
 
-  /** Convert distance (max ~441.67) to a 0–100 similarity score */
   function distanceToScore(dist) {
     const maxDist = Math.sqrt(255 * 255 * 3);
     const raw = Math.max(0, 1 - dist / maxDist) * 100;
     return Math.round(raw);
   }
+
+  // ─── 2D Color Picker ──────────────────────
+  const pickerCtx = els.pickerCanvas.getContext('2d');
+  const hueCtx = els.pickerHue.getContext('2d');
+
+  function drawHueBar() {
+    const w = els.pickerHue.width;
+    const h = els.pickerHue.height;
+    const gradient = hueCtx.createLinearGradient(0, 0, 0, h);
+    const steps = [0, 0.17, 0.33, 0.5, 0.67, 0.83, 1];
+    const colors = ['#FF0000', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#FF00FF', '#FF0000'];
+    steps.forEach((s, i) => gradient.addColorStop(s, colors[i]));
+    hueCtx.fillStyle = gradient;
+    hueCtx.fillRect(0, 0, w, h);
+  }
+
+  function drawPickerPlane() {
+    const w = els.pickerCanvas.width;
+    const h = els.pickerCanvas.height;
+    const baseColor = hsvToRGB(currentHue, 1, 1);
+
+    // Draw base hue
+    pickerCtx.fillStyle = `rgb(${baseColor.r},${baseColor.g},${baseColor.b})`;
+    pickerCtx.fillRect(0, 0, w, h);
+
+    // White gradient (left to right = low sat to high sat — inverted: white on left)
+    const whiteGrad = pickerCtx.createLinearGradient(0, 0, w, 0);
+    whiteGrad.addColorStop(0, 'rgba(255,255,255,1)');
+    whiteGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    pickerCtx.fillStyle = whiteGrad;
+    pickerCtx.fillRect(0, 0, w, h);
+
+    // Black gradient (top to bottom = high value to low value)
+    const blackGrad = pickerCtx.createLinearGradient(0, 0, 0, h);
+    blackGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    blackGrad.addColorStop(1, 'rgba(0,0,0,1)');
+    pickerCtx.fillStyle = blackGrad;
+    pickerCtx.fillRect(0, 0, w, h);
+  }
+
+  function updatePickerCursor() {
+    const wrap = els.pickerCanvas.parentElement;
+    const w = wrap.clientWidth;
+    const h = wrap.clientHeight;
+    // sat = x (left=0, right=1)
+    // val = y (top=1, bottom=0)
+    const x = currentSat * w;
+    const y = (1 - currentVal) * h;
+    els.pickerCursor.style.left = x + 'px';
+    els.pickerCursor.style.top = y + 'px';
+  }
+
+  function updateHueCursor() {
+    const h = els.pickerHue.parentElement.clientHeight;
+    const y = (currentHue / 360) * h;
+    els.hueCursor.style.top = y + 'px';
+  }
+
+  function getPlayerRGB() {
+    return hsvToRGB(currentHue, currentSat, currentVal);
+  }
+
+  function updatePlayerColor() {
+    const rgb = getPlayerRGB();
+    const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+    els.playerColor.style.backgroundColor = hex;
+    els.playerHex.textContent = hex;
+
+    // Similarity (only show in easy mode)
+    if (difficulty === 'easy') {
+      const dist = colorDistance(rgb, targetRGB);
+      const sim = distanceToScore(dist);
+      els.similarityValue.textContent = sim + '%';
+      els.similarityFill.style.width = sim + '%';
+
+      if (sim > 0) {
+        els.similarityFill.classList.add('has-value');
+      } else {
+        els.similarityFill.classList.remove('has-value');
+      }
+
+      if (sim >= 90) els.similarityValue.style.color = '#51cf66';
+      else if (sim >= 70) els.similarityValue.style.color = '#fcc419';
+      else els.similarityValue.style.color = '#ff6b6b';
+    }
+  }
+
+  // ─── Picker Mouse/Touch Events ─────────────
+  function handlePickerStart(e) {
+    isDraggingPicker = true;
+    handlePickerMove(e);
+  }
+
+  function handlePickerMove(e) {
+    if (!isDraggingPicker) return;
+    e.preventDefault();
+    const rect = els.pickerCanvas.parentElement.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    currentSat = x;
+    currentVal = 1 - y;
+    updatePickerCursor();
+    updatePlayerColor();
+  }
+
+  function handlePickerEnd() {
+    isDraggingPicker = false;
+  }
+
+  function handleHueStart(e) {
+    isDraggingHue = true;
+    handleHueMove(e);
+  }
+
+  function handleHueMove(e) {
+    if (!isDraggingHue) return;
+    e.preventDefault();
+    const rect = els.pickerHue.parentElement.getBoundingClientRect();
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    currentHue = y * 360;
+    updateHueCursor();
+    drawPickerPlane();
+    updatePlayerColor();
+  }
+
+  function handleHueEnd() {
+    isDraggingHue = false;
+  }
+
+  // Picker events
+  const pickerWrap = els.pickerCanvas.parentElement;
+  pickerWrap.addEventListener('mousedown', handlePickerStart);
+  pickerWrap.addEventListener('touchstart', handlePickerStart, { passive: false });
+  window.addEventListener('mousemove', handlePickerMove);
+  window.addEventListener('touchmove', handlePickerMove, { passive: false });
+  window.addEventListener('mouseup', handlePickerEnd);
+  window.addEventListener('touchend', handlePickerEnd);
+
+  // Hue events
+  const hueWrap = els.pickerHue.parentElement;
+  hueWrap.addEventListener('mousedown', handleHueStart);
+  hueWrap.addEventListener('touchstart', handleHueStart, { passive: false });
+  window.addEventListener('mousemove', handleHueMove);
+  window.addEventListener('touchmove', handleHueMove, { passive: false });
+  window.addEventListener('mouseup', handleHueEnd);
+  window.addEventListener('touchend', handleHueEnd);
+
+  // Init picker
+  drawHueBar();
+  drawPickerPlane();
+  updatePickerCursor();
+  updateHueCursor();
 
   // ─── Screen Management ─────────────────────
   function showScreen(name) {
@@ -186,33 +381,90 @@
 
     // Generate target
     targetRGB = randomRGB();
-    els.targetColor.style.backgroundColor = rgbToHex(targetRGB.r, targetRGB.g, targetRGB.b);
+    const targetHex = rgbToHex(targetRGB.r, targetRGB.g, targetRGB.b);
 
-    // Show / hide hex hint in hard mode
-    if (difficulty === 'hard') {
-      els.targetHex.textContent = '???';
-    } else {
-      els.targetHex.textContent = rgbToHex(targetRGB.r, targetRGB.g, targetRGB.b);
-    }
-
-    // Reset sliders
-    els.sliderR.value = 128;
-    els.sliderG.value = 128;
-    els.sliderB.value = 128;
+    // Reset picker to center (grey)
+    currentHue = 0;
+    currentSat = 0;
+    currentVal = 0.5;
+    drawPickerPlane();
+    updatePickerCursor();
+    updateHueCursor();
     updatePlayerColor();
 
-    // Timer
-    if (difficulty === 'medium' || difficulty === 'hard') {
-      els.timerContainer.classList.add('visible');
-      timeLeft = difficulty === 'hard' ? 10 : 15;
-      els.timerText.textContent = timeLeft;
-      els.timerRing.style.strokeDashoffset = '0';
-      els.timerRing.classList.remove('danger');
-      els.timerText.classList.remove('danger');
-      startTimer();
+    // Similarity bar: only visible in easy mode
+    if (difficulty === 'easy') {
+      els.similarityContainer.classList.remove('hidden');
     } else {
-      els.timerContainer.classList.remove('visible');
+      els.similarityContainer.classList.add('hidden');
     }
+
+    // Hard mode: fullscreen flash then hide target
+    if (difficulty === 'hard') {
+      els.targetCard.classList.add('target-hidden');
+      els.targetHex.textContent = '???';
+      showTargetFlash(targetHex);
+    } else {
+      els.targetCard.classList.remove('target-hidden');
+      els.targetColor.style.backgroundColor = targetHex;
+      els.targetHex.textContent = targetHex;
+
+      // Timer for medium
+      if (difficulty === 'medium') {
+        els.timerContainer.classList.add('visible');
+        timeLeft = 20;
+        els.timerText.textContent = timeLeft;
+        els.timerRing.style.strokeDashoffset = '0';
+        els.timerRing.classList.remove('danger');
+        els.timerText.classList.remove('danger');
+        startTimer();
+      } else {
+        els.timerContainer.classList.remove('visible');
+      }
+
+      showScreen('game');
+    }
+  }
+
+  // ─── Hard Mode: Fullscreen Flash ──────────
+  function showTargetFlash(hexColor) {
+    const flash = els.targetFlash;
+    flash.style.backgroundColor = hexColor;
+
+    // Determine if text should be light or dark
+    const lum = (targetRGB.r * 0.299 + targetRGB.g * 0.587 + targetRGB.b * 0.114);
+    const textColor = lum > 150 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)';
+    flash.querySelector('.flash-text').style.color = textColor;
+    flash.querySelector('.flash-countdown').style.color = textColor;
+    flash.querySelector('.flash-icon').style.filter = lum > 150 ? 'none' : 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))';
+
+    flash.classList.add('active');
+
+    let count = 5;
+    els.flashCountdown.textContent = count;
+
+    clearInterval(flashInterval);
+    flashInterval = setInterval(() => {
+      count--;
+      els.flashCountdown.textContent = count;
+      if (count <= 0) {
+        clearInterval(flashInterval);
+        flash.classList.remove('active');
+
+        // Now show game screen with hidden target
+        els.targetColor.style.backgroundColor = '#1a1a2e';
+        showScreen('game');
+
+        // Start timer for hard mode
+        els.timerContainer.classList.add('visible');
+        timeLeft = 20;
+        els.timerText.textContent = timeLeft;
+        els.timerRing.style.strokeDashoffset = '0';
+        els.timerRing.classList.remove('danger');
+        els.timerText.classList.remove('danger');
+        startTimer();
+      }
+    }, 1000);
 
     showScreen('game');
   }
@@ -220,7 +472,7 @@
   function startTimer() {
     clearInterval(timerInterval);
     const totalTime = timeLeft;
-    const circumference = 2 * Math.PI * 17; // r=17
+    const circumference = 2 * Math.PI * 17;
 
     timerInterval = setInterval(() => {
       timeLeft--;
@@ -240,57 +492,15 @@
     }, 1000);
   }
 
-  // ─── Slider Updates ────────────────────────
-  function updatePlayerColor() {
-    const r = parseInt(els.sliderR.value);
-    const g = parseInt(els.sliderG.value);
-    const b = parseInt(els.sliderB.value);
-
-    els.valR.textContent = r;
-    els.valG.textContent = g;
-    els.valB.textContent = b;
-
-    const hex = rgbToHex(r, g, b);
-    els.playerColor.style.backgroundColor = hex;
-    els.playerHex.textContent = hex;
-
-    // Similarity
-    const dist = colorDistance({ r, g, b }, targetRGB);
-    const sim = distanceToScore(dist);
-    els.similarityValue.textContent = sim + '%';
-    els.similarityFill.style.width = sim + '%';
-
-    if (sim > 0) {
-      els.similarityFill.classList.add('has-value');
-    } else {
-      els.similarityFill.classList.remove('has-value');
-    }
-
-    // Color the similarity text
-    if (sim >= 90) {
-      els.similarityValue.style.color = '#51cf66';
-    } else if (sim >= 70) {
-      els.similarityValue.style.color = '#fcc419';
-    } else {
-      els.similarityValue.style.color = '#ff6b6b';
-    }
-  }
-
-  els.sliderR.addEventListener('input', updatePlayerColor);
-  els.sliderG.addEventListener('input', updatePlayerColor);
-  els.sliderB.addEventListener('input', updatePlayerColor);
-
   // ─── Submit ────────────────────────────────
   els.btnConfirm.addEventListener('click', submitAnswer);
 
   function submitAnswer() {
     clearInterval(timerInterval);
+    clearInterval(flashInterval);
+    els.targetFlash.classList.remove('active');
 
-    const r = parseInt(els.sliderR.value);
-    const g = parseInt(els.sliderG.value);
-    const b = parseInt(els.sliderB.value);
-    const playerRGB = { r, g, b };
-
+    const playerRGB = getPlayerRGB();
     const dist = colorDistance(playerRGB, targetRGB);
     const score = distanceToScore(dist);
 
@@ -302,7 +512,6 @@
 
   // ─── Round Result ──────────────────────────
   function showRoundResult(score, playerRGB) {
-    // Emoji & text
     let emoji, text;
     if (score >= 95) { emoji = '🤩'; text = '完美！你是色彩天才！'; }
     else if (score >= 85) { emoji = '🎯'; text = '太厲害了！'; }
@@ -316,14 +525,12 @@
     els.resultTarget.style.backgroundColor = rgbToHex(targetRGB.r, targetRGB.g, targetRGB.b);
     els.resultPlayer.style.backgroundColor = rgbToHex(playerRGB.r, playerRGB.g, playerRGB.b);
 
-    // Button text
     if (currentRound >= TOTAL_ROUNDS) {
       els.btnNext.textContent = '查看結果 🏆';
     } else {
       els.btnNext.textContent = '下一關 →';
     }
 
-    // Confetti for high score
     if (score >= 85) {
       spawnConfetti();
     }
@@ -346,7 +553,6 @@
     const bestRound = Math.max(...roundScores);
     const worstRound = Math.min(...roundScores);
 
-    // Grade
     let grade, trophy, message;
     if (avgScore >= 95) { grade = 'S+'; trophy = '👑'; message = '傳說級調色大師！無人能敵！'; }
     else if (avgScore >= 90) { grade = 'S'; trophy = '🏆'; message = '你是真正的調色大師！'; }
@@ -360,7 +566,6 @@
     els.finalGrade.textContent = grade;
     els.finalMessage.textContent = message;
 
-    // Stats
     els.finalStats.innerHTML = `
       <div class="stat-item"><span class="stat-value">${avgScore}</span><span class="stat-label">平均分</span></div>
       <div class="stat-item"><span class="stat-value">${bestRound}</span><span class="stat-label">最高分</span></div>
@@ -370,7 +575,6 @@
 
     showScreen('final');
 
-    // Animate ring
     requestAnimationFrame(() => {
       const circumference = 2 * Math.PI * 52;
       const maxScore = TOTAL_ROUNDS * 100;
@@ -378,7 +582,6 @@
       els.finalRing.style.strokeDashoffset = (circumference * (1 - progress)).toString();
     });
 
-    // Big confetti
     if (avgScore >= 80) {
       for (let i = 0; i < 3; i++) {
         setTimeout(() => spawnConfetti(40), i * 300);

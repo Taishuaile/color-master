@@ -13,6 +13,15 @@
 <body>
   <canvas id="bg-canvas"></canvas>
 
+  <!-- Fullscreen Target Flash (Hard mode) -->
+  <div id="target-flash" class="target-flash">
+    <div class="flash-content">
+      <div class="flash-icon">👁️</div>
+      <div class="flash-text">記住這個顏色！</div>
+      <div class="flash-countdown" id="flash-countdown">5</div>
+    </div>
+  </div>
+
   <!-- Start Screen -->
   <div id="screen-start" class="screen active">
     <div class="logo-container">
@@ -27,17 +36,17 @@
         <button class="btn-difficulty active" data-difficulty="easy" id="btn-easy">
           <span class="diff-icon">🌱</span>
           <span class="diff-name">簡單</span>
-          <span class="diff-desc">RGB 滑桿</span>
+          <span class="diff-desc">即時相似度提示</span>
         </button>
         <button class="btn-difficulty" data-difficulty="medium" id="btn-medium">
           <span class="diff-icon">🔥</span>
           <span class="diff-name">中等</span>
-          <span class="diff-desc">限時 15 秒</span>
+          <span class="diff-desc">無相似度 + 限時</span>
         </button>
         <button class="btn-difficulty" data-difficulty="hard" id="btn-hard">
           <span class="diff-icon">💀</span>
           <span class="diff-name">困難</span>
-          <span class="diff-desc">限時 + 無提示</span>
+          <span class="diff-desc">記憶模式 5 秒</span>
         </button>
       </div>
     </div>
@@ -68,7 +77,7 @@
 
     <main class="game-body">
       <div class="color-compare">
-        <div class="color-card target-card">
+        <div class="color-card target-card" id="target-card">
           <div class="color-swatch" id="target-color"></div>
           <div class="color-label">🎯 目標色</div>
           <div class="color-hex" id="target-hex">#FF5733</div>
@@ -81,7 +90,7 @@
         </div>
       </div>
 
-      <div class="similarity-bar-container">
+      <div class="similarity-bar-container" id="similarity-container">
         <div class="similarity-label">
           <span>相似度</span>
           <span class="similarity-value" id="similarity-value">0%</span>
@@ -91,27 +100,15 @@
         </div>
       </div>
 
-      <div class="sliders-container" id="sliders-container">
-        <div class="slider-group" id="slider-r-group">
-          <div class="slider-header">
-            <span class="slider-label slider-label-r">R</span>
-            <span class="slider-val" id="val-r">128</span>
-          </div>
-          <input type="range" min="0" max="255" value="128" class="slider slider-r" id="slider-r">
+      <!-- 2D Color Picker -->
+      <div class="picker-container" id="picker-container">
+        <div class="picker-main-wrap">
+          <canvas class="picker-canvas" id="picker-canvas" width="280" height="280"></canvas>
+          <div class="picker-cursor" id="picker-cursor"></div>
         </div>
-        <div class="slider-group" id="slider-g-group">
-          <div class="slider-header">
-            <span class="slider-label slider-label-g">G</span>
-            <span class="slider-val" id="val-g">128</span>
-          </div>
-          <input type="range" min="0" max="255" value="128" class="slider slider-g" id="slider-g">
-        </div>
-        <div class="slider-group" id="slider-b-group">
-          <div class="slider-header">
-            <span class="slider-label slider-label-b">B</span>
-            <span class="slider-val" id="val-b">128</span>
-          </div>
-          <input type="range" min="0" max="255" value="128" class="slider slider-b" id="slider-b">
+        <div class="picker-hue-wrap">
+          <canvas class="picker-hue" id="picker-hue" width="28" height="280"></canvas>
+          <div class="hue-cursor" id="hue-cursor"></div>
         </div>
       </div>
 
