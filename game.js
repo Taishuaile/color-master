@@ -383,13 +383,13 @@
     targetRGB = randomRGB();
     const targetHex = rgbToHex(targetRGB.r, targetRGB.g, targetRGB.b);
 
-    // Reset picker to center (grey)
-    currentHue = 0;
-    currentSat = 0;
+    // Auto-set hue to target's correct hue; player only adjusts sat & val on the 2D plane
+    const targetHSV = rgbToHSV(targetRGB.r, targetRGB.g, targetRGB.b);
+    currentHue = targetHSV.h;
+    currentSat = 0.5;
     currentVal = 0.5;
     drawPickerPlane();
     updatePickerCursor();
-    updateHueCursor();
     updatePlayerColor();
 
     // Similarity bar: only visible in easy mode
