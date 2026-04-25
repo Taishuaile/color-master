@@ -276,6 +276,17 @@
     els.playerColor.style.backgroundColor = hex;
     els.playerHex.textContent = hex;
 
+    // Hard mode: entire screen shows current color
+    if (difficulty === 'hard' && els.pickerContainer.classList.contains('fullscreen-picker')) {
+      els.pickerContainer.style.backgroundColor = hex;
+      els.pickerCanvas.style.opacity = '0';
+      els.pickerCursor.style.opacity = '0';
+    } else {
+      els.pickerContainer.style.backgroundColor = '';
+      els.pickerCanvas.style.opacity = '1';
+      els.pickerCursor.style.opacity = '1';
+    }
+
     // Similarity (only show in easy mode)
     if (difficulty === 'easy') {
       const dist = colorDistance(rgb, targetRGB);
@@ -528,6 +539,9 @@
     els.gameBody.classList.remove('hard-mode');
     els.colorCompare.classList.remove('hidden-hard');
     els.pickerContainer.classList.remove('fullscreen-picker');
+    els.pickerContainer.style.backgroundColor = '';
+    els.pickerCanvas.style.opacity = '1';
+    els.pickerCursor.style.opacity = '1';
 
     const playerRGB = getPlayerRGB();
     const dist = colorDistance(playerRGB, targetRGB);
