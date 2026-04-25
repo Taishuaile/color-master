@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="調色大師 - 一個考驗你色彩感知力的網頁小遊戲">
+  <title>調色大師 | Color Master</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="bg-canvas"></canvas>
+
+  <!-- Start Screen -->
+  <div id="screen-start" class="screen active">
+    <div class="logo-container">
+      <div class="logo-icon">🎨</div>
+      <h1 class="logo-title">調色大師</h1>
+      <p class="logo-subtitle">COLOR MASTER</p>
+    </div>
+    <p class="tagline">考驗你的色彩感知力，混出最接近的顏色！</p>
+    <div class="difficulty-select">
+      <p class="difficulty-label">選擇難度</p>
+      <div class="difficulty-options">
+        <button class="btn-difficulty active" data-difficulty="easy" id="btn-easy">
+          <span class="diff-icon">🌱</span>
+          <span class="diff-name">簡單</span>
+          <span class="diff-desc">RGB 滑桿</span>
+        </button>
+        <button class="btn-difficulty" data-difficulty="medium" id="btn-medium">
+          <span class="diff-icon">🔥</span>
+          <span class="diff-name">中等</span>
+          <span class="diff-desc">限時 15 秒</span>
+        </button>
+        <button class="btn-difficulty" data-difficulty="hard" id="btn-hard">
+          <span class="diff-icon">💀</span>
+          <span class="diff-name">困難</span>
+          <span class="diff-desc">限時 + 無提示</span>
+        </button>
+      </div>
+    </div>
+    <button class="btn-start" id="btn-start">開始挑戰</button>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="screen-game" class="screen">
+    <header class="game-header">
+      <div class="header-left">
+        <span class="round-badge" id="round-badge">第 1 關</span>
+        <span class="round-total">/ 10</span>
+      </div>
+      <div class="header-center">
+        <div class="timer-container" id="timer-container">
+          <svg class="timer-ring" viewBox="0 0 40 40">
+            <circle class="timer-bg" cx="20" cy="20" r="17"/>
+            <circle class="timer-fg" cx="20" cy="20" r="17" id="timer-ring"/>
+          </svg>
+          <span class="timer-text" id="timer-text">15</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="score-label">總分</span>
+        <span class="score-value" id="total-score">0</span>
+      </div>
+    </header>
+
+    <main class="game-body">
+      <div class="color-compare">
+        <div class="color-card target-card">
+          <div class="color-swatch" id="target-color"></div>
+          <div class="color-label">🎯 目標色</div>
+          <div class="color-hex" id="target-hex">#FF5733</div>
+        </div>
+        <div class="vs-badge">VS</div>
+        <div class="color-card player-card">
+          <div class="color-swatch" id="player-color"></div>
+          <div class="color-label">🎨 你的色</div>
+          <div class="color-hex" id="player-hex">#000000</div>
+        </div>
+      </div>
+
+      <div class="similarity-bar-container">
+        <div class="similarity-label">
+          <span>相似度</span>
+          <span class="similarity-value" id="similarity-value">0%</span>
+        </div>
+        <div class="similarity-bar">
+          <div class="similarity-fill" id="similarity-fill"></div>
+        </div>
+      </div>
+
+      <div class="sliders-container" id="sliders-container">
+        <div class="slider-group" id="slider-r-group">
+          <div class="slider-header">
+            <span class="slider-label slider-label-r">R</span>
+            <span class="slider-val" id="val-r">128</span>
+          </div>
+          <input type="range" min="0" max="255" value="128" class="slider slider-r" id="slider-r">
+        </div>
+        <div class="slider-group" id="slider-g-group">
+          <div class="slider-header">
+            <span class="slider-label slider-label-g">G</span>
+            <span class="slider-val" id="val-g">128</span>
+          </div>
+          <input type="range" min="0" max="255" value="128" class="slider slider-g" id="slider-g">
+        </div>
+        <div class="slider-group" id="slider-b-group">
+          <div class="slider-header">
+            <span class="slider-label slider-label-b">B</span>
+            <span class="slider-val" id="val-b">128</span>
+          </div>
+          <input type="range" min="0" max="255" value="128" class="slider slider-b" id="slider-b">
+        </div>
+      </div>
+
+      <button class="btn-confirm" id="btn-confirm">✓ 確定提交</button>
+    </main>
+  </div>
+
+  <!-- Round Result Screen -->
+  <div id="screen-result" class="screen">
+    <div class="result-card">
+      <div class="result-emoji" id="result-emoji">🎯</div>
+      <div class="result-score-big" id="result-score-big">95</div>
+      <div class="result-text" id="result-text">太厲害了！</div>
+      <div class="result-colors">
+        <div class="result-swatch-group">
+          <div class="result-swatch" id="result-target"></div>
+          <span>目標</span>
+        </div>
+        <div class="result-arrow">→</div>
+        <div class="result-swatch-group">
+          <div class="result-swatch" id="result-player"></div>
+          <span>你的</span>
+        </div>
+      </div>
+      <button class="btn-next" id="btn-next">下一關 →</button>
+    </div>
+  </div>
+
+  <!-- Final Score Screen -->
+  <div id="screen-final" class="screen">
+    <div class="final-card">
+      <div class="final-trophy" id="final-trophy">🏆</div>
+      <h2 class="final-title">遊戲結束！</h2>
+      <div class="final-score-container">
+        <div class="final-score-ring">
+          <svg viewBox="0 0 120 120">
+            <circle class="ring-bg" cx="60" cy="60" r="52"/>
+            <circle class="ring-fg" cx="60" cy="60" r="52" id="final-ring"/>
+          </svg>
+          <div class="final-score-text">
+            <span class="final-score-num" id="final-score-num">0</span>
+            <span class="final-score-max">/ 1000</span>
+          </div>
+        </div>
+      </div>
+      <div class="final-grade" id="final-grade">S</div>
+      <div class="final-message" id="final-message">你是調色大師！</div>
+      <div class="final-stats" id="final-stats"></div>
+      <button class="btn-restart" id="btn-restart">🔄 再來一局</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
