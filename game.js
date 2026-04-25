@@ -412,8 +412,14 @@
     // Auto-set hue to target's correct hue; player only adjusts sat & val on the 2D plane
     const targetHSV = rgbToHSV(targetRGB.r, targetRGB.g, targetRGB.b);
     currentHue = targetHSV.h;
-    currentSat = 0.5;
-    currentVal = 0.5;
+    // Hard mode starts at white; other modes start at mid-grey
+    if (difficulty === 'hard') {
+      currentSat = 0;
+      currentVal = 1;
+    } else {
+      currentSat = 0.5;
+      currentVal = 0.5;
+    }
     drawPickerPlane();
     updatePickerCursor();
     updatePlayerColor();
