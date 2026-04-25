@@ -19,6 +19,9 @@
     btnStart: $('btn-start'),
     btnConfirm: $('btn-confirm'),
     btnNext: $('btn-next'),
+    gameHeader: document.querySelector('.game-header'),
+    roundTotal: document.querySelector('.round-total'),
+    finalScoreMax: document.querySelector('.final-score-max'),
     btnRestart: $('btn-restart'),
     roundBadge: $('round-badge'),
     totalScore: $('total-score'),
@@ -58,7 +61,7 @@
   };
 
   // ─── State ─────────────────────────────────
-  const TOTAL_ROUNDS = 10;
+  let TOTAL_ROUNDS = 3;
   let difficulty = 'easy';
   let currentRound = 0;
   let totalScore = 0;
@@ -390,12 +393,25 @@
     });
   });
 
+  // ─── Round Count Selector ──────────────────
+  // Default to 3
+  document.querySelector('[data-rounds="3"]').classList.add('active');
+  document.querySelectorAll('.btn-rounds').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.btn-rounds').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      TOTAL_ROUNDS = parseInt(btn.dataset.rounds);
+    });
+  });
+
   // ─── Start Game ────────────────────────────
   els.btnStart.addEventListener('click', () => {
     currentRound = 0;
     totalScore = 0;
     roundScores = [];
     els.totalScore.textContent = '0';
+    els.roundTotal.textContent = `/ ${TOTAL_ROUNDS}`;
+    els.finalScoreMax.textContent = `/ ${TOTAL_ROUNDS * 100}`;
     startRound();
   });
 
@@ -429,6 +445,7 @@
       els.pickerContainer.classList.add('fullscreen-picker');
       els.targetCard.classList.add('target-hidden');
       els.targetHex.textContent = '???';
+      els.gameHeader.classList.add('header-hidden');
     } else {
       currentSat = 0.5;
       currentVal = 0.5;
@@ -444,8 +461,9 @@
     updatePickerCursor();
     updatePlayerColor();
 
-    // Hard mode: 3s flash then play
+    // Hard mode: 3s flash then play (no timer)
     if (difficulty === 'hard') {
+      els.timerContainer.classList.remove('visible');
       showTargetFlash(targetHex);
     } else {
       // Timer for medium
@@ -490,21 +508,15 @@
         clearInterval(flashInterval);
         flash.classList.remove('active');
 
-        // Now show game screen with hidden target
+        // Show game screen with hidden target
         els.targetColor.style.backgroundColor = '#1a1a2e';
         showScreen('game');
 
+        // Show header floating on top
+        els.gameHeader.classList.remove('header-hidden');
+
         // Resize picker canvas for fullscreen after layout settles
         requestAnimationFrame(() => resizePickerCanvas());
-
-        // Start timer for hard mode
-        els.timerContainer.classList.add('visible');
-        timeLeft = 20;
-        els.timerText.textContent = timeLeft;
-        els.timerRing.style.strokeDashoffset = '0';
-        els.timerRing.classList.remove('danger');
-        els.timerText.classList.remove('danger');
-        startTimer();
       }
     }, 1000);
 
